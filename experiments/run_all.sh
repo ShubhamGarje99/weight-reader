@@ -9,7 +9,7 @@ run() {  # name, args...
   local name=$1; shift
   if [[ -f runs.noindex/$name.json ]]; then echo "skip $name (done)"; return; fi
   echo "=== $name ($(date +%H:%M:%S))"
-  nice -n 15 perl -e 'alarm 3600; exec @ARGV' $PY reader/train.py --epochs $EP --threads 2 --name $name "$@" 2>&1 | grep -E "^encoder|^ep|Traceback|Error"
+  nice -n 15 perl -e 'alarm 3600; exec @ARGV' $PY reader/train.py --epochs $EP --lr 2e-3 --threads 2 --name $name "$@" 2>&1 | grep --line-buffered -E "^encoder|^ep|Traceback|Error"
 }
 # (a) held-out seeds + (d) backdoor + (e) ablation
 run gmn_seed            --encoder gmn  --split seed --save-emb

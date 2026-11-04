@@ -73,12 +73,22 @@ neurons get a learned position embedding (their order means something); hidden
 neurons get only a layer embedding. Each node starts with its bias plus
 permutation-invariant statistics of its incoming and outgoing weights. Three
 rounds of message passing follow, where each message is a weighted sum over
-edges using 8 learned scalar features of the weight value, forwards and
-backwards through the network. Masked mean-pooling per layer and a small MLP give
-a 128-dimensional embedding. The live/dead mask is computed from the weights
+edges using 4 learned scalar features of the weight value, forwards and
+backwards through the network. The readout keeps input and output neurons by
+position (their features are concatenated, since their order is meaningful) and
+mean-pools each hidden layer (whose order is not). A small MLP gives a
+128-dimensional embedding. The live/dead mask is computed from the weights
 themselves (a dead neuron has an all-zero row and bias), not from metadata. The
 embedding is exactly invariant to hidden-neuron permutations (max difference
-3×10⁻⁷ in float32). 0.6 M parameters.
+5×10⁻⁷ in float32). 1.8 M parameters.
+
+A first version mean-pooled the input neurons too. It solved every field that
+depends only on *how many* inputs or outputs are used (modulus 100%, vector
+length 99%) and was at chance on every field that depends on *which* input is
+used (bit subset 0%, digit pair 6%, MNIST backdoor AUC 0.52). Keeping input
+positions in the readout fixed all of those. That is a useful lesson about what
+"permutation-aware" has to mean for a weight reader: hidden neurons are
+exchangeable, input and output neurons are not.
 
 **Structured heads.** Ten small heads on the embedding: task family (5-way),
 operation (15-way), modulus (4-way), bit subset (8 sigmoids), k (3-way),

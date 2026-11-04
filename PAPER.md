@@ -105,11 +105,20 @@ Hidden neurons get only a layer embedding. Each node starts from its bias and
 six order-free statistics of its incoming and outgoing weights (mean, standard
 deviation, max, min, mean absolute value, norm). Three rounds of message passing
 follow. In each round every node receives a sum over its edges, forwards and
-backwards, where each weight is first turned into eight learned scalar features.
+backwards, where each weight is first turned into four learned scalar features.
 Dead padding neurons are masked out; the mask is computed from the weights
-themselves, not from metadata. Mean-pooling per layer and a small MLP give a
-128-dimensional embedding. I verified the embedding changes by less than 10⁻⁶
-when hidden neurons are permuted. The whole reader has 0.6 M parameters.
+themselves, not from metadata. The readout keeps the input and output neurons by
+position, because their order is meaningful, and mean-pools each hidden layer,
+because its order is not. A small MLP then gives a 128-dimensional embedding. I
+verified the embedding changes by less than 10⁻⁶ when hidden neurons are
+permuted. The whole reader has 1.8 M parameters.
+
+A first version mean-pooled the input neurons as well. It was perfect on fields
+that depend only on how many inputs a network uses (the modulus, the vector
+length) and at chance on fields that depend on which inputs it uses (the bit
+subset, the digit pair, the MNIST backdoor). Keeping input positions in the
+readout fixed all of these at once. Hidden neurons are exchangeable; inputs and
+outputs are not, and the reader has to know the difference.
 
 Ten small heads sit on the embedding: family, operation, modulus, bit subset,
 vector length, half-plane angle (as cosine and sine), circle radius, digit pair,
