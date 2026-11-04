@@ -3,7 +3,7 @@
 # Usage: zsh experiments/run_all.sh [epochs]
 set -u
 cd "$(dirname "$0")/.."
-EP=${1:-30}
+EP=${1:-60}
 PY=.venv/bin/python
 run() {  # name, args...
   local name=$1; shift
@@ -14,8 +14,8 @@ run() {  # name, args...
 # (a) held-out seeds + (d) backdoor + (e) ablation
 run gmn_seed            --encoder gmn  --split seed --save-emb
 run flat_seed           --encoder flat --split seed
-run flat_seed_permtest  --encoder flat --split seed --permute-test
-run gmn_seed_permtest   --encoder gmn  --split seed --permute-test
+run flat_seed_permtest  --encoder flat --split seed --permute-test --eval-only flat_seed
+run gmn_seed_permtest   --encoder gmn  --split seed --permute-test --eval-only gmn_seed
 run meta_seed           --encoder meta --split seed
 # (b) held-out widths
 run gmn_width16         --encoder gmn  --split width --held 16

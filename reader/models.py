@@ -45,7 +45,7 @@ def _stats(x, dim):
 
 
 class GMNEncoder(nn.Module):
-    def __init__(self, d=64, rounds=3, k=8, emb=128):
+    def __init__(self, d=64, rounds=3, k=4, emb=128):
         super().__init__()
         self.d, self.rounds, self.k = d, rounds, k
         self.layer_emb = nn.Embedding(5, d)
@@ -58,7 +58,9 @@ class GMNEncoder(nn.Module):
         self.bwd_lin = nn.ModuleList([nn.Linear(d, k * d) for _ in range(rounds)])
         self.update = nn.ModuleList([nn.Sequential(nn.Linear(3 * d, 2 * d), nn.GELU(), nn.Linear(2 * d, d)) for _ in range(rounds)])
         self.norms = nn.ModuleList([nn.LayerNorm(d) for _ in range(rounds)])
-        self.readout = nn.Sequential(nn.Linear(5 * d, 2 * emb), nn.GELU(), nn.Linear(2 * emb, emb))
+        # input and output neurons are not permutable, so their features are concatenated by position;
+        # hidden layers are mean-pooled (permutation invariant)
+        self.readout = nn.Sequential(nn.Linear((D_IN + D_OUT + 3) * d, 4 * emb), nn.GELU(), nn.Linear(4 * emb, emb))
 
     def forward(self, flat):
         B = flat.shape[0]
@@ -88,10 +90,12 @@ class GMNEncoder(nn.Module):
                 hin, hout = h[l], h[l + 1]
                 n_in = live[l].sum(-1).clamp(min=1).view(B, 1, 1)
                 n_out = live[l + 1].sum(-1).clamp(min=1).view(B, 1, 1)
-                Hk = self.fwd_lin[r](hin).view(B, LAYER_DIMS[l], self.k, self.d)
-                m_fwd = torch.einsum("boik,bikd->bod", E[l], Hk) / n_in       # messages to layer l+1
-                Gk = self.bwd_lin[r](hout).view(B, LAYER_DIMS[l + 1], self.k, self.d)
-                m_bwd = torch.einsum("boik,bokd->bid", E[l], Gk) / n_out      # messages to layer l
+                o_, i_ = LAYER_DIMS[l + 1], LAYER_DIMS[l]
+                Ek = E[l].permute(0, 3, 1, 2).reshape(B * self.k, o_, i_)                 # [B*k, out, in]
+                Hk = self.fwd_lin[r](hin).view(B, i_, self.k, self.d).permute(0, 2, 1, 3).reshape(B * self.k, i_, self.d)
+                m_fwd = torch.bmm(Ek, Hk).view(B, self.k, o_, self.d).sum(1) / n_in          # messages to layer l+1
+                Gk = self.bwd_lin[r](hout).view(B, o_, self.k, self.d).permute(0, 2, 1, 3).reshape(B * self.k, o_, self.d)
+                m_bwd = torch.bmm(Ek.transpose(1, 2), Gk).view(B, self.k, i_, self.d).sum(1) / n_out   # messages to layer l
                 new_h[l + 1] = new_h[l + 1] + m_fwd
                 new_h[l] = new_h[l] + m_bwd
             # placeholders for "no message from that side" at the ends
@@ -102,8 +106,9 @@ class GMNEncoder(nn.Module):
                 x = self.norms[r](h[l] + self.update[r](x))
                 upd.append(x * live[l].unsqueeze(-1))
             h = upd
-        pooled = [(h[l] * live[l].unsqueeze(-1)).sum(1) / live[l].sum(-1, keepdim=True).clamp(min=1) for l in range(5)]
-        return self.readout(torch.cat(pooled, -1))
+        pooled = [(h[l] * live[l].unsqueeze(-1)).sum(1) / live[l].sum(-1, keepdim=True).clamp(min=1) for l in (1, 2, 3)]
+        feats = [h[0].reshape(B, -1), h[4].reshape(B, -1)] + pooled
+        return self.readout(torch.cat(feats, -1))
 
 
 class FlatEncoder(nn.Module):

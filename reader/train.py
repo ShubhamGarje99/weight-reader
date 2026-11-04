@@ -171,7 +171,10 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--save-emb", action="store_true")
+    ap.add_argument("--eval-only", default=None, help="name of a finished run whose checkpoint is evaluated (no training)")
     args = ap.parse_args()
+    if args.eval_only:
+        args.epochs = 0
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     rng = np.random.default_rng(args.seed)
@@ -192,10 +195,13 @@ def main():
     else:
         enc = MetaEncoder()
     heads = Heads()
+    if args.eval_only:
+        ck = torch.load(f"runs.noindex/{args.eval_only}.pt", weights_only=False)
+        enc.load_state_dict(ck["enc"]); heads.load_state_dict(ck["heads"])
     params = list(enc.parameters()) + list(heads.parameters())
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-4)
     steps_per_epoch = int(np.ceil(len(tr) / args.bs))
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.epochs * steps_per_epoch, pct_start=0.1)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=max(1, args.epochs * steps_per_epoch), pct_start=0.1)
     n_params = sum(p.numel() for p in params)
     print(f"encoder={args.encoder} split={args.split}/{args.held} train={len(tr)} test={len(te)} params={n_params}", flush=True)
 
