@@ -1,0 +1,5 @@
+.venv/
+*.noindex/
+__pycache__/
+*.pyc
+.DS_Store
